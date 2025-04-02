@@ -1,6 +1,7 @@
 import torch
 from transformers import MT5ForConditionalGeneration, MT5Tokenizer
 from datasets import load_dataset
+from time import time
 
 # Путь к уже сохранённой модели
 model_path = "./mt5-large-ru-test2"
@@ -19,13 +20,14 @@ eval_dataset = load_dataset("json", data_files=data_files)["validation"]
 model.eval()
 
 # Отправляем на GPU, если доступен
-if torch.cuda.is_available():
-    model.to("cuda")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
 
 # Параметры генерации
 generation_kwargs = {
     "max_length": 256,
-    "num_beams": 4,
+    "num_beams": 3,
+    "length_penalty": 1,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "repetition_penalty": 1.2,
@@ -35,35 +37,46 @@ generation_kwargs = {
 # Путь к файлу вывода
 output_file = "generated_outputs.txt"
 
-# Открываем файл для записи
-with open(output_file, "w", encoding="utf-8") as f_out:
-    num_examples = min(30, len(eval_dataset))
-    for i in range(num_examples):
-        input_text = eval_dataset[i]["text"].strip().replace("\n", " ")
-        inputs = tokenizer(input_text, return_tensors="pt")
+# Настройки батча
+batch_size = 100  # Можно увеличить до 32–64, если точно влезает в VRAM
 
-        if torch.cuda.is_available():
-            inputs = {k: v.to("cuda") for k, v in inputs.items()}
+# Генерация
+start_time = time()
+
+with open(output_file, "w", encoding="utf-8") as f_out:
+    total = min(1000, len(eval_dataset))  # Можно увеличить лимит
+    for start_idx in range(0, total, batch_size):
+        end_idx = min(start_idx + batch_size, total)
+        batch_texts = [eval_dataset[i]["text"].strip().replace("\n", " ") for i in range(start_idx, end_idx)]
+
+        # Токенизация с паддингом
+        inputs = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True).to(device)
 
         with torch.no_grad():
             outputs = model.generate(**inputs, **generation_kwargs)
 
-        prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
-        # Пишем в файл
-        f_out.write(f"=== Пример {i+1} ===\n")
-        f_out.write("Вход:\n")
-        f_out.write(input_text + "\n")
-        f_out.write("Выход:\n")
-        f_out.write(prediction + "\n")
-        f_out.write("-" * 40 + "\n")
+        for i, (inp, out) in enumerate(zip(batch_texts, decoded_outputs), start=start_idx + 1):
+            f_out.write(f"=== Пример {i} ===\n")
+            f_out.write("Вход:\n")
+            f_out.write(inp + "\n")
+            f_out.write("Выход:\n")
+            f_out.write(out + "\n")
+            f_out.write("-" * 40 + "\n")
 
-        # Также печатаем в консоль
-        print(f"=== Пример {i+1} ===")
-        print("Вход:")
-        print(input_text)
-        print("Выход:")
-        print(prediction)
-        print("-" * 40)
+            print(f"=== Пример {i} ===")
+            print("Вход:")
+            print(inp)
+            print("Выход:")
+            print(out)
+            print("-" * 40)
+
+# Время генерации
+end_time = time()
+elapsed = end_time - start_time
+avg_per_sample = elapsed / total
 
 print(f"\n✅ Генерация завершена. Результаты сохранены в: {output_file}")
+print(f"⏱️ Общее время: {elapsed:.2f} сек на {total} примеров")
+print(f"⏱️ Среднее время на строку: {avg_per_sample:.3f} сек")
