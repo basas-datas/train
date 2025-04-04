@@ -1,15 +1,15 @@
-from transformers import AutoTokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, MT5ForConditionalGeneration
 from huggingface_hub import HfApi, HfFolder
 import os
 
 # 🔐 Токен из переменной окружения
 hf_token = os.environ["huggingface"]
 
-# 📁 Локальная директория с моделью
-local_model_dir = "./flan-t5-autobatch"
+# 📁 Путь к чекпоинту
+local_checkpoint_dir = "./mt5-large-big_rain_1/checkpoint-14880"
 
-# 🏷️ Репозиторий (ВАЖНО: должен быть в формате 'username/repo_name')
-repo_id = "ajkndfjsdfasdf/flan-5-small-bigdataset"
+# 🏷️ Название репозитория
+repo_id = "ajkndfjsdfasdf/mt5-large-big_rain_1-checkpoint-14880"
 
 # 🔐 Авторизация
 api = HfApi()
@@ -23,12 +23,14 @@ except:
     print(f"📦 Репозиторий {repo_id} не найден. Создаём...")
     api.create_repo(repo_id=repo_id, token=hf_token, repo_type="model", exist_ok=True)
 
-# 📦 Загружаем модель и токенизатор
-model = T5ForConditionalGeneration.from_pretrained(local_model_dir)
-tokenizer = AutoTokenizer.from_pretrained(local_model_dir)
+# ✅ Загружаем модель из чекпоинта
+model = MT5ForConditionalGeneration.from_pretrained(local_checkpoint_dir)
 
-# 🚀 Пушим в корень репозитория
-model.push_to_hub(repo_id, token=hf_token, commit_message="🚀 Push latest model to root")
-tokenizer.push_to_hub(repo_id, token=hf_token, commit_message="🚀 Push latest tokenizer to root")
+# ✅ Загружаем токенизатор из базовой модели (если в чекпоинте его нет)
+tokenizer = AutoTokenizer.from_pretrained("google/mt5-large")
 
-print(f"✅ Модель загружена в: https://huggingface.co/{repo_id}")
+# 🚀 Публикуем в Hugging Face
+model.push_to_hub(repo_id, token=hf_token, commit_message="🚀 Push checkpoint 14880 model")
+tokenizer.push_to_hub(repo_id, token=hf_token, commit_message="🚀 Push tokenizer from base model")
+
+print(f"✅ Чекпоинт загружен в: https://huggingface.co/{repo_id}")
