@@ -79,7 +79,7 @@ def try_training_with_batch_size(batch_size_start):
                 eval_dataset=tokenized_datasets["validation"]
             )
 
-            trainer.train(resume_from_checkpoint=True)
+            trainer.train(resume_from_checkpoint=True) # ⚠️⚠️⚠️ убрать если нет чекпоинов и первый старт
             return batch_size
         except RuntimeError as e:
             if "CUDA out of memory" in str(e):
