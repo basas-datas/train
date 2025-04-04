@@ -4,7 +4,7 @@ from datasets import load_dataset
 from time import time
 
 # Путь к уже сохранённой модели
-model_path = "./mt5-large-ru-test2"
+model_path = "./big-train"
 
 # Загружаем модель и токенизатор
 model = MT5ForConditionalGeneration.from_pretrained(model_path)
@@ -12,7 +12,7 @@ tokenizer = MT5Tokenizer.from_pretrained(model_path)
 
 # Загружаем только валидационную часть датасета
 data_files = {
-    "validation": "mt5_ru_gen_eval.jsonl"
+    "validation": "eval.jsonl"
 }
 eval_dataset = load_dataset("json", data_files=data_files)["validation"]
 

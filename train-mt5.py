@@ -6,9 +6,9 @@ import torch
 
 # 🔧 Название модели и путь
 model_name = "google/mt5-large"
-run_id = "mt5-large-ru-test2"
+run_id = "mt5-large-big_rain_1"
 output_dir = f"./{run_id}"
-start_batch_size = 10   # ⚠️ Начинаем с небольшого batch, чтобы избежать OOM
+start_batch_size = 50   # ⚠️ Начинаем с небольшого batch, чтобы избежать OOM
 step_batch_size = 1
 
 # 📦 Загружаем модель и токенизатор
@@ -17,8 +17,8 @@ tokenizer = MT5Tokenizer.from_pretrained(model_name)
 
 # 📂 Загружаем датасет
 data_files = {
-    "train": "mt5_ru_gen_async.jsonl",
-    "validation": "mt5_ru_gen_eval.jsonl"
+    "train": "train.jsonl",
+    "validation": "eval.jsonl"
 }
 dataset = load_dataset("json", data_files=data_files)
 
