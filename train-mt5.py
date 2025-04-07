@@ -6,7 +6,7 @@ import torch
 
 # 🔧 Название модели и путь
 model_name = "google/mt5-large"
-run_id = "mt5-large-big_rain_1"
+run_id = "mt5-large-big_train_2"
 output_dir = f"./{run_id}"
 start_batch_size = 50   # ⚠️ Начинаем с небольшого batch, чтобы избежать OOM
 step_batch_size = 1
