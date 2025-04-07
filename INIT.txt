@@ -1,6 +1,8 @@
 # Обновляем систему и ставим нужные пакеты
 apt update && apt install -y git-lfs screen
 
+pip install protobuf==3.20.*
+
 # Устанавливаем правильную версию NumPy (<2), чтобы PyTorch не падал
 pip install --force-reinstall "numpy<2"
 
