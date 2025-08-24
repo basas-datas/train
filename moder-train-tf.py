@@ -13,6 +13,8 @@ from sklearn.metrics import f1_score, precision_recall_fscore_support
 from scipy.sparse import hstack
 import joblib
 from tqdm import tqdm   # прогресс-бары
+from sklearn.linear_model import SGDClassifier
+
 
 LABEL_ORDER = [
     "is_illegal_drugs","is_weapons","is_escort_prostitution","is_gambling","is_betting",
@@ -50,7 +52,17 @@ def build_vectorizers():
     return vec_word, vec_char
 
 def build_classifier():
-    base = LogisticRegression(solver="saga", max_iter=200, C=1.0, n_jobs=-1, class_weight="balanced")
+    # SGD быстрее на больших матрицах, есть логирование
+    base = SGDClassifier(
+        loss="log_loss",        # даёт predict_proba
+        alpha=1e-5,             # аналог регуляризации
+        penalty="l2",
+        max_iter=50,            # эпох (каждая = полный проход по данным)
+        tol=1e-3,               # условие остановки
+        n_jobs=-1,
+        verbose=1,              # <-- пишет прогресс в stdout
+        class_weight="balanced"
+    )
     return OneVsRestClassifier(base, n_jobs=-1)
 
 def fit_thresholds(y_true, y_proba):
