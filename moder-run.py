@@ -57,7 +57,7 @@ def main(val_path, model_dir, n_samples=100):
         print(f"TEXT:\n{r['text']}\n")
         true_labels = [LABEL_ORDER[j] for j in range(len(LABEL_ORDER)) if Ytrue[i,j]==1]
         pred_labels = [LABEL_ORDER[j] for j in range(len(LABEL_ORDER)) if Ypred[i,j]==1]
-        print(f"TRUE : {true_labels}")
+        print(f"CHATGPT : {true_labels}")
         print(f"PRED : {pred_labels}")
 
 if __name__ == "__main__":
