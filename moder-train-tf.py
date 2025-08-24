@@ -22,6 +22,36 @@ LABEL_ORDER = [
     "is_dating","is_extremism","is_political","is_war_military","is_piracy","is_cybercrime"
 ]
 
+def oversample_rare(records: List[Dict], order: List[str], min_count: int = 500) -> List[Dict]:
+    """Дублирует записи с редкими классами, чтобы увеличить их вес"""
+    # посчитаем количество позитивов на класс
+    counts = {lbl: 0 for lbl in order}
+    for r in records:
+        for lbl in order:
+            if r["labels"].get(lbl):
+                counts[lbl] += 1
+
+    log(f"Частоты классов до oversampling: {counts}")
+
+    # ищем редкие классы
+    rare_classes = {lbl for lbl, c in counts.items() if c < min_count}
+    if not rare_classes:
+        return records
+
+    log(f"Будем дублировать редкие классы: {rare_classes}")
+
+    augmented = []
+    for r in records:
+        # добавляем всегда один раз
+        augmented.append(r)
+        # если пример содержит редкий класс — дублируем
+        if any(r["labels"].get(lbl) for lbl in rare_classes):
+            augmented.append(r)  # можно добавить ещё несколько раз (×2, ×3 и т.д.)
+
+    log(f"Размер выборки: {len(records)} → {len(augmented)} после oversampling")
+    return augmented
+
+
 def log(msg: str):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -91,9 +121,14 @@ def evaluate(y_true, y_proba, thresholds):
 
 def train(train_path, val_path, out_dir):
     # load
-    tr = read_jsonl(train_path); va = read_jsonl(val_path)
-    Xtr_texts,Ytr = to_Xy(tr,LABEL_ORDER)
-    Xva_texts,Yva = to_Xy(va,LABEL_ORDER)
+    tr = read_jsonl(train_path)
+    va = read_jsonl(val_path)
+
+    # oversample rare
+    tr = oversample_rare(tr, LABEL_ORDER, min_count=500)
+
+    Xtr_texts, Ytr = to_Xy(tr, LABEL_ORDER)
+    Xva_texts, Yva = to_Xy(va, LABEL_ORDER)
 
     # vectorize
     log("Обучение векторизаторов...")
