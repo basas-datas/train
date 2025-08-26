@@ -55,7 +55,7 @@ def build_dataset(records):
     return triples, labels
 
 
-def embed_weighted(embedder, triples, batch_size=64):
+def embed_weighted(embedder, triples, batch_size=140):
     all_vecs = []
     for i in tqdm(range(0, len(triples), batch_size), desc="Эмбеддинги"):
         batch = triples[i:i+batch_size]
