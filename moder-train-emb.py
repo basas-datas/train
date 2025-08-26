@@ -5,7 +5,6 @@ import time
 import joblib
 import numpy as np
 from tqdm import tqdm
-from collections import Counter
 from sentence_transformers import SentenceTransformer
 from sklearn.linear_model import SGDClassifier
 from sklearn.multiclass import OneVsRestClassifier
@@ -43,7 +42,7 @@ def read_jsonl(path):
 
 
 def build_dataset(records):
-    texts, labels, triples = [], [], []
+    triples, labels = [], []
     for r in records:
         title = r.get("title") or ""
         link  = r.get("short_link") or ""
@@ -61,9 +60,14 @@ def build_dataset(records):
     return triples, labels
 
 
-def embed_weighted(embedder, triples, batch_size=140):
+def embed_weighted(embedder, triples, batch_size=400):
     all_vecs = []
-    for i in tqdm(range(0, len(triples), batch_size), desc="Эмбеддинги"):
+    total = len(triples)
+    num_batches = (total + batch_size - 1) // batch_size
+    for i in range(0, total, batch_size):
+        batch_id = i // batch_size + 1
+        log(f"Эмбеддинги: батч {batch_id}/{num_batches} (обработано {i}/{total}, осталось ~{total - i})")
+
         batch = triples[i:i+batch_size]
         titles = [t[0] for t in batch]
         links  = [t[1] for t in batch]
@@ -89,7 +93,7 @@ def build_classifier():
         verbose=1,
         class_weight="balanced"
     )
-    return OneVsRestClassifier(base, n_jobs=-1)
+    return OneVsRestClassifier(base, n_jobs=-1, verbose=1)
 
 
 def fit_thresholds(y_true, y_proba):
@@ -195,7 +199,10 @@ def train():
 
     log("Обучение классификатора...")
     clf = build_classifier()
+    start = time.time()
     clf.fit(Xtr, Ytr)
+    elapsed = time.time() - start
+    log(f"Сошлось за {clf.estimators_[0].n_iter_} итераций, время {elapsed:.2f} сек.")
 
     log("Предсказания на валидации...")
     proba = clf.predict_proba(Xva)
