@@ -7,7 +7,7 @@ pip install protobuf==3.20.*
 pip install --force-reinstall "numpy<2"
 
 # Ставим остальные зависимости
-pip install --no-cache-dir transformers sentencepiece datasets safetensors torch accelerate scipy wandb numpy scikit-learn scipy joblib tqdm
+pip install --no-cache-dir transformers sentencepiece datasets safetensors torch accelerate scipy wandb numpy scikit-learn scipy joblib tqdm sentence-transformers
 
 # Инициализируем Git LFS
 git lfs install
