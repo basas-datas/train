@@ -21,5 +21,8 @@ screen -S train
 # Переходим в /workspace
 cd /workspace
 
+#split -b 99M train.jsonl part_
+cat part_* > train.jsonl
+
 # Запускаем скрипт обучения
-python train.py
+# python train.py
