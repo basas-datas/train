@@ -18,9 +18,15 @@ VAL_PATH   = "val.jsonl"
 OUT_DIR    = "embed_model_topics"
 MODEL_NAME = "distiluse-base-multilingual-cased-v1"
 
+# где будут храниться вектора
+TRAIN_EMB_PATH = "train_emb.npy"
+VAL_EMB_PATH   = "val_emb.npy"
+
 W_TITLE = 3
 W_LINK  = 2
 W_DESC  = 1
+
+TOP_KS = [1, 3, 5, 10]
 # ==============================================
 
 def log(msg: str):
@@ -99,7 +105,37 @@ def fit_thresholds(y_true, y_proba):
     return thresholds
 
 
+# ---------- Метрики Top-k ----------
+def precision_recall_at_k(y_true, y_proba, k=5):
+    precisions, recalls = [], []
+    for yt, yp in zip(y_true, y_proba):
+        topk = np.argsort(-yp)[:k]
+        hits = yt[topk].sum()
+        precisions.append(hits / k)
+        recalls.append(hits / yt.sum() if yt.sum() > 0 else 0)
+    return np.mean(precisions), np.mean(recalls)
+
+
+def dcg_at_k(y_true_row, y_proba_row, k=10):
+    topk = np.argsort(-y_proba_row)[:k]
+    gains = y_true_row[topk]
+    discounts = 1.0 / np.log2(np.arange(2, k+2))
+    return np.sum(gains * discounts)
+
+
+def ndcg_at_k(y_true, y_proba, k=10):
+    ndcgs = []
+    for yt, yp in zip(y_true, y_proba):
+        dcg = dcg_at_k(yt, yp, k)
+        ideal = dcg_at_k(yt, yt, min(k, int(yt.sum())))
+        if ideal == 0:
+            continue
+        ndcgs.append(dcg / ideal)
+    return np.mean(ndcgs) if ndcgs else 0.0
+
+
 def evaluate(y_true, y_proba, thresholds, mlb):
+    log("=== Метрики с порогами ===")
     y_pred = np.zeros_like(y_true)
     for j, t in enumerate(thresholds):
         y_pred[:, j] = (y_proba[:, j] >= t).astype(int)
@@ -113,6 +149,12 @@ def evaluate(y_true, y_proba, thresholds, mlb):
     prec, rec, f1, _ = precision_recall_fscore_support(y_true, y_pred, average=None, zero_division=0)
     for j in top_idx:
         log(f"{mlb.classes_[j]:<20s}: prec={prec[j]:.3f}, rec={rec[j]:.3f}, f1={f1[j]:.3f}, thr={thresholds[j]:.2f}, sup={counts[j]}")
+
+    log("=== Метрики по Top-k ===")
+    for k in TOP_KS:
+        p, r = precision_recall_at_k(y_true, y_proba, k)
+        n = ndcg_at_k(y_true, y_proba, k)
+        log(f"Top-{k}: Precision@{k}={p:.4f}, Recall@{k}={r:.4f}, nDCG@{k}={n:.4f}")
 
 
 def train():
@@ -131,10 +173,25 @@ def train():
     log(f"Загрузка эмбеддинговой модели: {MODEL_NAME}")
     embedder = SentenceTransformer(MODEL_NAME)
 
-    log("Эмбеддинги train...")
-    Xtr = embed_weighted(embedder, Xtr_triples)
-    log("Эмбеддинги val...")
-    Xva = embed_weighted(embedder, Xva_triples)
+    # --- эмбеддинги train ---
+    if os.path.exists(TRAIN_EMB_PATH):
+        log(f"Загрузка сохранённых эмбеддингов train из {TRAIN_EMB_PATH}")
+        Xtr = np.load(TRAIN_EMB_PATH)
+    else:
+        log("Вычисление эмбеддингов train...")
+        Xtr = embed_weighted(embedder, Xtr_triples)
+        np.save(TRAIN_EMB_PATH, Xtr)
+        log(f"Сохранено в {TRAIN_EMB_PATH}")
+
+    # --- эмбеддинги val ---
+    if os.path.exists(VAL_EMB_PATH):
+        log(f"Загрузка сохранённых эмбеддингов val из {VAL_EMB_PATH}")
+        Xva = np.load(VAL_EMB_PATH)
+    else:
+        log("Вычисление эмбеддингов val...")
+        Xva = embed_weighted(embedder, Xva_triples)
+        np.save(VAL_EMB_PATH, Xva)
+        log(f"Сохранено в {VAL_EMB_PATH}")
 
     log("Обучение классификатора...")
     clf = build_classifier()
