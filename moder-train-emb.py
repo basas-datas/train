@@ -63,12 +63,7 @@ def build_dataset(records):
 
 def embed_weighted(embedder, triples, batch_size=140):
     all_vecs = []
-    total = len(triples)
-    num_batches = (total + batch_size - 1) // batch_size
-    for i in range(0, total, batch_size):
-        batch_id = i // batch_size + 1
-        log(f"Эмбеддинги: батч {batch_id}/{num_batches} (обработано {i}/{total}, осталось ~{total - i})")
-
+    for i in tqdm(range(0, len(triples), batch_size), desc="Эмбеддинги"):
         batch = triples[i:i+batch_size]
         titles = [t[0] for t in batch]
         links  = [t[1] for t in batch]
