@@ -6,7 +6,7 @@ import joblib
 import numpy as np
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
-from pecos.xmc import XLinearModel
+from pecos.xmc.xlinear.model import XLinearModel
 from pecos.utils import smat_util
 from sklearn.preprocessing import MultiLabelBinarizer
 
