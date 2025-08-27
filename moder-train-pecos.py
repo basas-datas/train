@@ -10,6 +10,7 @@ from sentence_transformers import SentenceTransformer
 from pecos.xmc.xlinear.model import XLinearModel
 from sklearn.preprocessing import MultiLabelBinarizer
 from scipy.sparse import csr_matrix
+import logging
 
 # ================= ПАРАМЕТРЫ ==================
 TRAIN_PATH = "train.jsonl"
@@ -26,6 +27,13 @@ W_DESC  = 1
 
 TOP_KS = [1, 3, 5, 10]
 # ==============================================
+
+# === Настройка логов ===
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 def log(msg: str):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
