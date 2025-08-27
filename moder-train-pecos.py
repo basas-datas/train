@@ -153,14 +153,24 @@ def train():
         Xva = embed_weighted(embedder, Xva_triples)
         np.save(VAL_EMB_PATH, Xva)
 
-    log("Обучение XLinear (PECOS) с весами...")
+    log("⚡ Начало обучения XLinear (PECOS)...")
     start = time.time()
+
+    # Включаем параметр verbosity для логов
+    train_params = {
+        "threads": os.cpu_count(),  # использовать все CPU
+        "max_leaf_size": 100,
+        "verbosity": 2              # уровень логирования (0=тихо, 1=основное, 2=подробно)
+    }
+
     model = XLinearModel.train(
-        csr_matrix(Xtr.astype(np.float32)),  # X обязательно float32
-        Ytr                                   # Y уже float32
+        csr_matrix(Xtr.astype(np.float32)),
+        Ytr,
+        train_params=train_params
     )
+
     elapsed = time.time() - start
-    log(f"Обучение завершено за {elapsed:.2f} сек.")
+    log(f"✅ Обучение завершено за {elapsed:.2f} сек.")
 
     log("Предсказания на валидации...")
     pred_csr = model.predict(csr_matrix(Xva.astype(np.float32)), only_topk=100)
@@ -173,7 +183,8 @@ def train():
     joblib.dump(mlb, os.path.join(OUT_DIR, "mlb.joblib"))
     joblib.dump(embedder, os.path.join(OUT_DIR, "embedder.joblib"))
 
-    log(f"Модель сохранена в {OUT_DIR}")
+    log(f"💾 Модель сохранена в {OUT_DIR}")
+
 
 if __name__ == "__main__":
     train()
