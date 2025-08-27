@@ -5,10 +5,11 @@ import time
 import joblib
 import numpy as np
 from tqdm import tqdm
+from collections import Counter
 from sentence_transformers import SentenceTransformer
 from pecos.xmc.xlinear.model import XLinearModel
-from pecos.utils import smat_util
 from sklearn.preprocessing import MultiLabelBinarizer
+from scipy.sparse import csr_matrix
 
 # ================= ПАРАМЕТРЫ ==================
 TRAIN_PATH = "train.jsonl"
@@ -32,9 +33,14 @@ def log(msg: str):
 def read_jsonl(path):
     data = []
     with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
+        for i, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
                 data.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                log(f"⚠️ Ошибка JSON в строке {i}: {e}")
     return data
 
 def build_dataset(records):
@@ -72,6 +78,19 @@ def embed_weighted(embedder, triples, batch_size=400):
         emb = (W_TITLE*e_title + W_LINK*e_link + W_DESC*e_desc) / (W_TITLE+W_LINK+W_DESC)
         all_vecs.append(emb)
     return np.vstack(all_vecs)
+
+# === Построение матрицы Y с весами ===
+def build_label_matrix(labels, classes):
+    label_to_idx = {l: i for i, l in enumerate(classes)}
+    rows, cols, data = [], [], []
+    for row_id, labs in enumerate(labels):
+        counts = Counter(labs)  # считаем дубликаты
+        for lab, freq in counts.items():
+            if lab in label_to_idx:
+                rows.append(row_id)
+                cols.append(label_to_idx[lab])
+                data.append(float(freq))  # вес = число повторов (float!)
+    return csr_matrix((data, (rows, cols)), shape=(len(labels), len(classes)), dtype=np.float32)
 
 def precision_recall_at_k(y_true, y_score, k=5):
     precisions, recalls = [], []
@@ -112,10 +131,13 @@ def train():
     Xva_triples, Yva_labels = build_dataset(va)
 
     mlb = MultiLabelBinarizer()
-    Ytr = mlb.fit_transform(Ytr_labels)
-    Yva = mlb.transform(Yva_labels)
+    mlb.fit(Ytr_labels + Yva_labels)
+    classes = mlb.classes_
 
-    log(f"Количество уникальных лейблов: {len(mlb.classes_)}")
+    Ytr = build_label_matrix(Ytr_labels, classes)
+    Yva = build_label_matrix(Yva_labels, classes)
+
+    log(f"Количество уникальных лейблов: {len(classes)}")
 
     embedder = SentenceTransformer(MODEL_NAME)
 
@@ -131,21 +153,20 @@ def train():
         Xva = embed_weighted(embedder, Xva_triples)
         np.save(VAL_EMB_PATH, Xva)
 
-    log("Обучение XLinear (PECOS)...")
+    log("Обучение XLinear (PECOS) с весами...")
     start = time.time()
-    # обучаем модель
     model = XLinearModel.train(
-        smat_util.dense_to_csr_matrix(Xtr),
-        smat_util.dense_to_csr_matrix(Ytr)
+        csr_matrix(Xtr.astype(np.float32)),  # X обязательно float32
+        Ytr                                   # Y уже float32
     )
     elapsed = time.time() - start
     log(f"Обучение завершено за {elapsed:.2f} сек.")
 
     log("Предсказания на валидации...")
-    pred_csr = model.predict(smat_util.dense_to_csr_matrix(Xva), only_topk=100)
+    pred_csr = model.predict(csr_matrix(Xva.astype(np.float32)), only_topk=100)
     y_score = pred_csr.toarray()
 
-    evaluate(Yva, y_score)
+    evaluate(Yva.toarray(), y_score)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     model.save(OUT_DIR)
