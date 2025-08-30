@@ -77,7 +77,7 @@ def build_dataset(records):
             labels.append(labs)
     return triples, labels
 
-def embed_weighted(embedder, triples, batch_size=256):
+def embed_weighted(embedder, triples, batch_size=1024):
     """
     Считает эмбеддинги с весами: title*W_TITLE + link*W_LINK + desc*W_DESC.
     E5-base не требует специальных префиксов.
