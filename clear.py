@@ -66,7 +66,7 @@ def clean_link(link: str):
     link = link.strip()
 
     # Правило 3: наличие спецсимволов → приватная
-    if any(ch in link for ch in "-_+–"):
+    if any(ch in link for ch in "-+–"):
         return "<PRIV_LINK>", link
 
     # Правило 1: ровно 16 символов
