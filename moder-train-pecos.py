@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import re
 import json
 import time
 import joblib
@@ -23,8 +22,8 @@ TRAIN_EMB_PATH = "train_emb_e5.npy"         # файл для кэша эмбе�
 VAL_EMB_PATH   = "val_emb_e5.npy"           # файл для кэша эмбеддингов val
 
 # веса для разных частей текста
-W_TITLE = 3
-W_LINK  = 2
+W_TITLE = 4
+W_LINK  = 3
 W_DESC  = 1
 
 # метрики будем считать для этих k
@@ -41,40 +40,6 @@ logging.basicConfig(
 def log(msg: str):
     """Удобный принт с таймштампом"""
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
-
-# === Очистка текста ===
-
-def clean_desc(text: str) -> str:
-    """Очищает описание от ссылок, username, email и длинных чисел"""
-    if not text:
-        return ""
-
-    # Любые ссылки (http/https + всё до пробела или конца строки)
-    text = re.sub(r"https?://\S+|www\.\S+", "<URL>", text)
-
-    # @username
-    text = re.sub(r"@\w+", "<USER>", text)
-
-    # Email
-    text = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "<EMAIL>", text)
-
-    # длинные числа (например телефоны, id, счета)
-    text = re.sub(r"\b\d{5,}\b", "<NUM>", text)
-
-    return text.strip()
-
-def clean_link(link: str) -> str:
-    """Проверяет ссылку: если она приватная (рандомная абракадабра) → заменяет"""
-    if not link:
-        return ""
-
-    # Маска приватной ссылки: только буквы/цифры/-/_ , длина >= 10
-    if re.fullmatch(r"[A-Za-z0-9\-_]{10,}", link):
-        return "<PRIV_LINK>"
-
-    return link.strip()
-
-# === Вспомогательные функции ===
 
 def read_jsonl(path):
     """Читает JSONL файл построчно"""
@@ -98,8 +63,8 @@ def build_dataset(records):
     triples, labels = [], []
     for r in records:
         title = r.get("title") or ""
-        link  = clean_link(r.get("short_link") or "")
-        desc  = clean_desc(r.get("orig_description") or "")
+        link  = r.get("short_link") or ""
+        desc  = r.get("orig_description") or ""
 
         labs = []
         if r.get("main_topic"): labs.append(r["main_topic"])
