@@ -13,18 +13,20 @@ from scipy.sparse import csr_matrix
 import logging
 
 # ================= ПАРАМЕТРЫ ==================
-TRAIN_PATH = "train.jsonl"
-VAL_PATH   = "val.jsonl"
-OUT_DIR    = "xlinear_model_topics"
-MODEL_NAME = "distiluse-base-multilingual-cased-v1"
+TRAIN_PATH = "train.jsonl"                  # путь к обучающей выборке
+VAL_PATH   = "val.jsonl"                    # путь к валидационной выборке
+OUT_DIR    = "xlinear_model_topics"         # папка для сохранения модели
+MODEL_NAME = "intfloat/multilingual-e5-base"   # 🔄 используем e5-base эмбеддер
 
-TRAIN_EMB_PATH = "train_emb.npy"
-VAL_EMB_PATH   = "val_emb.npy"
+TRAIN_EMB_PATH = "train_emb_e5.npy"         # файл для кэша эмбеддингов train
+VAL_EMB_PATH   = "val_emb_e5.npy"           # файл для кэша эмбеддингов val
 
-W_TITLE = 4
+# веса для разных частей текста
+W_TITLE = 3
 W_LINK  = 2
 W_DESC  = 1
 
+# метрики будем считать для этих k
 TOP_KS = [1, 3, 5, 10]
 # ==============================================
 
@@ -36,9 +38,11 @@ logging.basicConfig(
 )
 
 def log(msg: str):
+    """Удобный принт с таймштампом"""
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 def read_jsonl(path):
+    """Читает JSONL файл построчно"""
     data = []
     with open(path, "r", encoding="utf-8") as f:
         for i, line in enumerate(f, 1):
@@ -52,6 +56,10 @@ def read_jsonl(path):
     return data
 
 def build_dataset(records):
+    """
+    Собирает список (title, link, desc) и список меток для каждой записи.
+    Метки берутся из main_topic, main_topic_old, possible_topics.
+    """
     triples, labels = [], []
     for r in records:
         title = r.get("title") or ""
@@ -69,7 +77,11 @@ def build_dataset(records):
             labels.append(labs)
     return triples, labels
 
-def embed_weighted(embedder, triples, batch_size=400):
+def embed_weighted(embedder, triples, batch_size=256):
+    """
+    Считает эмбеддинги с весами: title*W_TITLE + link*W_LINK + desc*W_DESC.
+    E5-base не требует специальных префиксов.
+    """
     all_vecs = []
     total = len(triples)
     for i in range(0, total, batch_size):
@@ -80,27 +92,36 @@ def embed_weighted(embedder, triples, batch_size=400):
         descs  = [t[2] for t in batch]
 
         e_title = embedder.encode(titles, convert_to_numpy=True, batch_size=batch_size, show_progress_bar=False)
-        e_link  = embedder.encode(links, convert_to_numpy=True, batch_size=batch_size, show_progress_bar=False)
-        e_desc  = embedder.encode(descs, convert_to_numpy=True, batch_size=batch_size, show_progress_bar=False)
+        e_link  = embedder.encode(links,  convert_to_numpy=True, batch_size=batch_size, show_progress_bar=False)
+        e_desc  = embedder.encode(descs,  convert_to_numpy=True, batch_size=batch_size, show_progress_bar=False)
 
+        # линейная комбинация с весами
         emb = (W_TITLE*e_title + W_LINK*e_link + W_DESC*e_desc) / (W_TITLE+W_LINK+W_DESC)
         all_vecs.append(emb)
     return np.vstack(all_vecs)
 
-# === Построение матрицы Y с весами ===
 def build_label_matrix(labels, classes):
+    """
+    Строим бинарную матрицу Y (samples x labels).
+    Если у примера несколько меток — ставим 1 (или вес) для каждой.
+    """
     label_to_idx = {l: i for i, l in enumerate(classes)}
     rows, cols, data = [], [], []
     for row_id, labs in enumerate(labels):
-        counts = Counter(labs)  # считаем дубликаты
+        counts = Counter(labs)  # если есть дубликаты меток
         for lab, freq in counts.items():
             if lab in label_to_idx:
                 rows.append(row_id)
                 cols.append(label_to_idx[lab])
-                data.append(float(freq))  # вес = число повторов (float!)
+                data.append(float(freq))
     return csr_matrix((data, (rows, cols)), shape=(len(labels), len(classes)), dtype=np.float32)
 
 def precision_recall_at_k(y_true, y_score, k=5):
+    """
+    Считает Precision@k и Recall@k.
+    y_true — матрица [samples x labels], бинарная.
+    y_score — предсказанные вероятности.
+    """
     precisions, recalls = [], []
     for yt, yp in zip(y_true, y_score):
         topk = np.argsort(-yp)[:k]
@@ -110,12 +131,14 @@ def precision_recall_at_k(y_true, y_score, k=5):
     return np.mean(precisions), np.mean(recalls)
 
 def dcg_at_k(y_true_row, y_score_row, k=10):
+    """Discounted Cumulative Gain для одной строки"""
     topk = np.argsort(-y_score_row)[:k]
     gains = y_true_row[topk]
     discounts = 1.0 / np.log2(np.arange(2, k+2))
     return np.sum(gains * discounts)
 
 def ndcg_at_k(y_true, y_score, k=10):
+    """Normalized DCG"""
     ndcgs = []
     for yt, yp in zip(y_true, y_score):
         dcg = dcg_at_k(yt, yp, k)
@@ -125,6 +148,7 @@ def ndcg_at_k(y_true, y_score, k=10):
     return np.mean(ndcgs) if ndcgs else 0.0
 
 def evaluate(y_true, y_score):
+    """Считает и выводит Precision/Recall/nDCG для каждого K"""
     log("=== Метрики по Top-k ===")
     for k in TOP_KS:
         p, r = precision_recall_at_k(y_true, y_score, k)
@@ -132,12 +156,14 @@ def evaluate(y_true, y_score):
         log(f"Top-{k}: Precision@{k}={p:.4f}, Recall@{k}={r:.4f}, nDCG@{k}={n:.4f}")
 
 def train():
+    """Основной пайплайн: загрузка данных, эмбеддинг, обучение, валидация"""
     log("Загрузка датасета...")
     tr = read_jsonl(TRAIN_PATH)
     va = read_jsonl(VAL_PATH)
     Xtr_triples, Ytr_labels = build_dataset(tr)
     Xva_triples, Yva_labels = build_dataset(va)
 
+    # кодируем метки в бинарную матрицу
     mlb = MultiLabelBinarizer()
     mlb.fit(Ytr_labels + Yva_labels)
     classes = mlb.classes_
@@ -147,8 +173,10 @@ def train():
 
     log(f"Количество уникальных лейблов: {len(classes)}")
 
+    # эмбеддер
     embedder = SentenceTransformer(MODEL_NAME)
 
+    # кэшируем эмбеддинги
     if os.path.exists(TRAIN_EMB_PATH):
         Xtr = np.load(TRAIN_EMB_PATH)
     else:
@@ -161,14 +189,15 @@ def train():
         Xva = embed_weighted(embedder, Xva_triples)
         np.save(VAL_EMB_PATH, Xva)
 
+    # обучение PECOS
     log("⚡ Начало обучения XLinear (PECOS)...")
     start = time.time()
 
-    # Включаем параметр verbosity для логов
     train_params = {
-        "threads": os.cpu_count(),  # использовать все CPU
-        "max_leaf_size": 100,
-        "verbosity": 2              # уровень логирования (0=тихо, 1=основное, 2=подробно)
+        "threads": os.cpu_count(),       # все CPU
+        "max_leaf_size": 100,            # размер листа
+        "negative_sampling": "tfn",      # улучшает топ-K метрики
+        "verbosity": 2                   # уровень логов
     }
 
     model = XLinearModel.train(
@@ -180,12 +209,15 @@ def train():
     elapsed = time.time() - start
     log(f"✅ Обучение завершено за {elapsed:.2f} сек.")
 
+    # предсказания на валидации
     log("Предсказания на валидации...")
     pred_csr = model.predict(csr_matrix(Xva.astype(np.float32)), only_topk=100)
     y_score = pred_csr.toarray()
 
+    # метрики
     evaluate(Yva.toarray(), y_score)
 
+    # сохраняем всё
     os.makedirs(OUT_DIR, exist_ok=True)
     model.save(OUT_DIR)
     joblib.dump(mlb, os.path.join(OUT_DIR, "mlb.joblib"))

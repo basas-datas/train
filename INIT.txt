@@ -22,7 +22,7 @@ screen -S train
 cd /workspace
 
 #split -b 99M train0.jsonl part_ /// split -b 99M train_pecos.npy pecos_
-cat part_* > train.jsonl
+cat part_* > train0.jsonl
 
 # Запускаем скрипт обучения
 # python train.py
