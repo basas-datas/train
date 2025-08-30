@@ -27,7 +27,8 @@ DELETION = {
 # === Очистка текста ===
 
 def clean_desc(text: str) -> str:
-    """Очищает описание от любых URL, username, email и длинных чисел"""
+    """Очищает описание от любых URL, username, email и длинных чисел.
+       Телефоны с + заменяются на +<NUM>."""
     if not text:
         return ""
 
@@ -41,14 +42,18 @@ def clean_desc(text: str) -> str:
     text = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "<EMAIL>", text)
 
     # длинные числа (например телефоны, id, счета)
+    # сначала телефоны с + впереди
+    text = re.sub(r"\+\d{5,}", "+<NUM>", text)
+    # остальные длинные числа
     text = re.sub(r"\b\d{5,}\b", "<NUM>", text)
 
     return text.strip()
 
 
-def clean_link(link: str) -> str:
+def clean_link(link: str):
     """
     Проверяет ссылку и заменяет на токен <PRIV_LINK>, если она приватная.
+    Возвращает (новая_ссылка, old_link) — чтобы можно было проверить подмены.
     
     Приватная ссылка определяется по правилам:
     1. Ровно 16 символов (латиница/цифры).
@@ -56,23 +61,23 @@ def clean_link(link: str) -> str:
     3. Если строка содержит "-", "_" , "+", "–" — то сразу приватная.
     """
     if not link:
-        return ""
+        return "", None
 
     link = link.strip()
 
     # Правило 3: наличие спецсимволов → приватная
     if any(ch in link for ch in "-_+–"):
-        return "<PRIV_LINK>"
+        return "<PRIV_LINK>", link
 
     # Правило 1: ровно 16 символов
     if re.fullmatch(r"[A-Za-z0-9]{16}", link):
-        return "<PRIV_LINK>"
+        return "<PRIV_LINK>", link
 
     # Правило 2: 16 + "_" или "-" или "–" + 5–6 символов
     if re.fullmatch(r"[A-Za-z0-9]{16}[_\-–][A-Za-z0-9]{5,6}", link):
-        return "<PRIV_LINK>"
+        return "<PRIV_LINK>", link
 
-    return link
+    return link, None
 
 
 # === Работа с метками ===
@@ -145,8 +150,13 @@ def normalize_item(item, canon_fn):
     # 🔄 очистка текстов
     if item.get("orig_description"):
         item["orig_description"] = clean_desc(item["orig_description"])
+
     if item.get("short_link"):
-        item["short_link"] = clean_link(item["short_link"])
+        new_link, old_link = clean_link(item["short_link"])
+        item["short_link"] = new_link
+        if old_link:
+            item["old_link"] = old_link  # сохраняем оригинал, если была замена
+
     # title не трогаем
 
     return item
