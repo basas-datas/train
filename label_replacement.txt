@@ -117,6 +117,7 @@
 "dogs": "dog",
 "ebook": "ebooks",
 "escort": "escorts",
+"escort": "escort_prostitution",
 "exchange": "exchanges",
 "fan_club": "fanclub",
 "free_ad": "free_ads",
