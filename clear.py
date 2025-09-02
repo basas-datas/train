@@ -21,7 +21,7 @@ DELETION = {
     "promotion","advertising","social","updates","bot","links",
     "russia","russian","ukrainian","ukrain","ukrainians",
     "watch","watches","chatting","commerce","group_chat",
-    "ban","chat","channel", "communities"
+    "ban","chat","channel", "communities", 'posting', 'undefined'
 }
 
 # === Очистка текста ===
